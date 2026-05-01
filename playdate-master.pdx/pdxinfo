@@ -1,0 +1,8 @@
+name=Spiel
+author=Player
+description=Concentric ring game
+bundleID=com.player.spiel
+version=1.0
+buildNumber=1
+pdxversion=30003
+buildtime=830927690
