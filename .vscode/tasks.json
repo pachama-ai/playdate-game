@@ -1,0 +1,43 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Build PDX",
+            "type": "shell",
+            "command": "${env:PLAYDATE_SDK_PATH}\\bin\\pdc.exe",
+            "args": [
+                "${workspaceFolder}\\source",
+                "${workspaceFolder}\\game.pdx"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "reveal": "silent",
+                "panel": "shared"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Run in Simulator",
+            "type": "shell",
+            "command": "Start-Process",
+            "args": [
+                "${env:PLAYDATE_SDK_PATH}\\bin\\PlaydateSimulator.exe",
+                "-ArgumentList",
+                "${workspaceFolder}\\game.pdx"
+            ],
+            "dependsOn": "Build PDX",
+            "group": {
+                "kind": "test",
+                "isDefault": true
+            },
+            "presentation": {
+                "reveal": "silent",
+                "panel": "shared"
+            },
+            "problemMatcher": []
+        }
+    ]
+}
