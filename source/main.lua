@@ -1,5 +1,7 @@
 import "CoreLibs/graphics"
 import "gfxp"
+import "sfx"
+import "music"
 local gfxp <const> = GFXP
 import "model"
 import "view"
@@ -151,6 +153,7 @@ function playdate.update()
     end
 
     updateBridges(dt)
+    updateMusic(dt, S.playerRing, S.RING_COUNT)
     updatePlayer(dt)
     if S.gameState ~= S.STATE_PLAY then return end
     updateEnemies(dt)

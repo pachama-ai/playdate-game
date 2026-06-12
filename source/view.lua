@@ -7,13 +7,56 @@ local gfx  <const> = playdate.graphics
 local math <const> = math
 local gfxp <const> = GFXP
 
--- Hintergrund: dot-6i Pattern (in Image gebacken, kein aktives Pattern)
+-- Hintergrund: Universum mit Planeten
 local abstractBg = nil
 local function buildAbstractBg()
     abstractBg = gfx.image.new(400, 240, gfx.kColorBlack)
     gfx.pushContext(abstractBg)
-        gfxp.set('wave-1i')
+        gfx.setColor(gfx.kColorBlack)
         gfx.fillRect(0, 0, 400, 240)
+        -- Sterne
+        math.randomseed(42)
+        for i = 1, 100 do
+            local x = math.random(0, 399)
+            local y = math.random(0, 239)
+            local sz = math.random(1, 3)
+            gfx.setColor(gfx.kColorWhite)
+            gfx.fillRect(x, y, sz, sz)
+        end
+        -- Planet 1: Mondsichel (oben links) — halbtransparent via Pattern
+        gfxp.set('gray-3')
+        gfx.fillCircleAtPoint(55, 45, 20)
+        gfx.setColor(gfx.kColorBlack)
+        gfx.fillCircleAtPoint(62, 40, 17)
+        -- Planet 2: Heller Planet (oben rechts) — ohne Streifen
+        gfxp.set('gray-1')
+        gfx.fillCircleAtPoint(340, 55, 25)
+        -- Planet 3: Saturn mit Ring (unten links) — weiter nach aussen
+        gfxp.set('gray-3')
+        gfx.fillCircleAtPoint(55, 195, 15)
+        gfx.setColor(gfx.kColorWhite)
+        gfx.drawLine(30, 188, 80, 202)
+        gfx.drawLine(32, 192, 78, 198)
+        gfx.drawLine(30, 202, 80, 188)
+        gfx.drawLine(32, 198, 78, 192)
+        -- Planet 4: kleiner heller Mond (oben Mitte)
+        gfx.setColor(gfx.kColorWhite)
+        gfx.fillCircleAtPoint(200, 28, 6)
+        -- Planet 5: dunkler Planet mit heller Kruste (rechts Mitte)
+        gfxp.set('gray-5')
+        gfx.fillCircleAtPoint(370, 150, 10)
+        gfx.setColor(gfx.kColorBlack)
+        gfx.fillCircleAtPoint(370, 150, 8)
+        -- Planet 6: winziger Mond (unten rechts)
+        gfx.setColor(gfx.kColorWhite)
+        gfx.fillCircleAtPoint(295, 210, 4)
+        gfxp.set('white')
+        gfx.setColor(gfx.kColorBlack)
+        gfx.fillCircleAtPoint(370, 150, 8)
+        -- Planet 6: winziger Mond (unten rechts)
+        gfx.setColor(gfx.kColorWhite)
+        gfx.fillCircleAtPoint(295, 210, 4)
+        gfxp.set('white')
     gfx.popContext()
 end
 
@@ -25,7 +68,7 @@ end
 
 local function fillCircleWithBg(r)
     local ri = math.ceil(r)
-    gfxp.set('wave-1i')
+    gfxp.set('decor-18i')
     for dy = -ri, ri do
         local y = S.cy + dy
         if y >= 0 and y <= 239 then
@@ -40,13 +83,8 @@ local function fillCircleWithBg(r)
 end
 
 local function drawArc(innerR, outerR, arcStart, arcSweep, invert)
-    if arcSweep >= 359 then
-        gfx.setColor(gfx.kColorWhite)
-        gfx.fillCircleAtPoint(S.cx, S.cy, sc(outerR))
-        fillCircleWithBg(sc(innerR))
-        return
-    end
-    local steps = math.max(24, math.ceil(arcSweep / 3))
+    -- Vollkreis als Polygon-Segmente zeichnen (kein fillCircleAtPoint → Hintergrund scheint durch)
+    local steps = math.max(24, math.ceil(math.max(arcSweep, 360) / 3))
     local da = arcSweep / steps
     local oi = sc(innerR)
     local oo = sc(outerR)
@@ -85,117 +123,74 @@ local function drawBridgeShape(angle_deg, midR, halfLen, halfW)
     gfx.fillPolygon(x1,y1, x2,y2, x3,y3, x4,y4)
 end
 
--- Gegner-Sprites: lazily erstellt beim ersten Aufruf (vermeidet Absturz beim Laden)
--- Gegner-Sprites: lazily erstellt beim ersten Aufruf (vermeidet Absturz beim Laden)
-local enemyImageGhost  = nil   -- Geist (Standard)
-local enemyImageHunter = nil   -- Jäger (folgt Spieler)
-local enemyImageInvisible = nil -- Unsichtbarer (periodisch unsichtbar)
-local enemyImageGuardian = nil -- Wächter (blockiert Brücken)
-local enemyImageDead   = nil
+-- Gegner-Sprites: lazily erstellt beim ersten Aufruf
+local enemyImageGhost     = nil   -- Geist (Standard, rund)
+local enemyImageHunter    = nil   -- Jäger (spitz/Dreieck)
+local enemyImageGuardian  = nil   -- Wächter (quadratisch)
+local enemyImageDead      = nil
 
 local function initSprites()
     if enemyImageGhost then return end
 
-    -- Hilfsfunktion: Basis-Körper + Tropfen zeichnen
-    local function drawBody(white)
-        if white then gfx.setColor(gfx.kColorWhite) else gfx.setColor(gfx.kColorBlack) end
-        gfx.fillRect(6, 4, 20, 20)   -- Koerper
-        gfx.fillRect(8,  24, 2, 3)   -- Tropfen links
-        gfx.fillRect(13, 24, 3, 5)   -- Tropfen mitte-links
-        gfx.fillRect(18, 24, 2, 2)   -- Tropfen mitte-rechts
-        gfx.fillRect(22, 24, 2, 4)   -- Tropfen rechts
-    end
-    local function drawOutline()
-        gfx.setColor(gfx.kColorBlack)
-        gfx.fillRect(5, 3, 22, 22)   -- Koerper-Umriss
-        gfx.fillRect(7, 24, 4, 5)    -- Tropfen links Umriss
-        gfx.fillRect(12, 24, 5, 7)   -- Tropfen mitte-links Umriss
-        gfx.fillRect(17, 24, 4, 4)   -- Tropfen mitte-rechts Umriss
-        gfx.fillRect(21, 24, 4, 6)   -- Tropfen rechts Umriss
-    end
-    local function drawEyes(x1, y1, x2, y2, w, h)
-        gfx.setColor(gfx.kColorBlack)
-        gfx.fillRect(x1, y1, w, h)
-        gfx.fillRect(x2, y2, w, h)
-    end
-
-    -- === GEIST (Standard) ===
+    -- === GEIST (Standard) — runder Körper, Tropfen unten ===
     enemyImageGhost = gfx.image.new(32, 32, gfx.kColorClear)
     if enemyImageGhost then
         gfx.pushContext(enemyImageGhost)
-            drawOutline()
-            drawBody(true)
-            drawEyes(10, 12, 19, 12, 3, 3)  -- normale runde Augen
+            -- Umriss
+            gfx.setColor(gfx.kColorBlack)
+            gfx.fillRect(5, 3, 22, 22)
+            gfx.fillRect(7, 24, 4, 5)
+            gfx.fillRect(12, 24, 5, 7)
+            gfx.fillRect(17, 24, 4, 4)
+            gfx.fillRect(21, 24, 4, 6)
+            -- Körper weiss
+            gfx.setColor(gfx.kColorWhite)
+            gfx.fillRect(6, 4, 20, 20)
+            gfx.fillRect(8,  24, 2, 3)
+            gfx.fillRect(13, 24, 3, 5)
+            gfx.fillRect(18, 24, 2, 2)
+            gfx.fillRect(22, 24, 2, 4)
+            -- Augen
+            gfx.setColor(gfx.kColorBlack)
+            gfx.fillRect(10, 12, 3, 3)
+            gfx.fillRect(19, 12, 3, 3)
         gfx.popContext()
     end
 
-    -- === JÄGER (riesige wütende Schlitzaugen) ===
+    -- === JÄGER — Dreieck (spitz nach oben, breit unten) ===
     enemyImageHunter = gfx.image.new(32, 32, gfx.kColorClear)
     if enemyImageHunter then
         gfx.pushContext(enemyImageHunter)
-            drawOutline()
-            drawBody(true)
-            -- Wütende Schlitzaugen (dicke diagonale Balken)
+            -- Umriss (dreieckig)
             gfx.setColor(gfx.kColorBlack)
-            gfx.fillRect(8,  11, 6, 3)   -- linkes Auge breit
-            gfx.fillRect(18, 11, 6, 3)   -- rechtes Auge breit
-            -- Pupillen klein weiss
+            gfx.fillPolygon(16, 1, 1, 28, 31, 28)
+            -- Körper weiss (kleineres Dreieck)
             gfx.setColor(gfx.kColorWhite)
-            gfx.fillRect(11, 12, 2, 1)
-            gfx.fillRect(21, 12, 2, 1)
+            gfx.fillPolygon(16, 4, 4, 25, 28, 25)
+            -- Wütende Augen (waagerechte Schlitze)
+            gfx.setColor(gfx.kColorBlack)
+            gfx.fillRect(9,  14, 6, 2)
+            gfx.fillRect(17, 14, 6, 2)
         gfx.popContext()
     end
 
-    -- === UNSICHTBARER (Körper nur gestreift/gerastert statt solid) ===
-    enemyImageInvisible = gfx.image.new(32, 32, gfx.kColorClear)
-    if enemyImageInvisible then
-        gfx.pushContext(enemyImageInvisible)
-            drawOutline()
-            -- Körper: horizontale Streifen (weiss-schwarz-weiss-schwarz)
-            gfx.setColor(gfx.kColorBlack)
-            for y = 6, 22, 4 do
-                gfx.fillRect(6, y, 20, 2)
-            end
-            gfx.setColor(gfx.kColorWhite)
-            gfx.fillRect(8,  24, 2, 3)
-            gfx.fillRect(13, 24, 3, 5)
-            gfx.fillRect(18, 24, 2, 2)
-            gfx.fillRect(22, 24, 2, 4)
-            -- Leere Augen (weisse Löcher)
-            gfx.setColor(gfx.kColorWhite)
-            gfx.fillRect(10, 12, 3, 3)
-            gfx.fillRect(19, 12, 3, 3)
-            gfx.setColor(gfx.kColorBlack)
-            gfx.fillRect(11, 13, 1, 1)
-            gfx.fillRect(20, 13, 1, 1)
-        gfx.popContext()
-    end
-
-    -- === WÄCHTER (dicker schwarzer Schild + kleine Augen oben) ===
+    -- === WÄCHTER — Quadrat (blockig, schwer) ===
     enemyImageGuardian = gfx.image.new(32, 32, gfx.kColorClear)
     if enemyImageGuardian then
         gfx.pushContext(enemyImageGuardian)
-            drawOutline()
-            -- Oberer Koerper weiss
-            gfx.setColor(gfx.kColorWhite)
-            gfx.fillRect(6, 4, 20, 8)    -- obere Hälfte
-            -- Schildbalken (massive schwarze Mitte)
+            -- Umriss
             gfx.setColor(gfx.kColorBlack)
-            gfx.fillRect(5, 12, 22, 8)   -- dicker Querbalken
-            -- Unterer Koerper weiss
+            gfx.fillRect(3, 3, 26, 26)
+            -- Körper weiss
             gfx.setColor(gfx.kColorWhite)
-            gfx.fillRect(6, 20, 20, 4)   -- unterer Rest
-            gfx.fillRect(8,  24, 2, 3)
-            gfx.fillRect(13, 24, 3, 5)
-            gfx.fillRect(18, 24, 2, 2)
-            gfx.fillRect(22, 24, 2, 4)
-            -- Augen klein oben
+            gfx.fillRect(5, 5, 22, 22)
+            -- Schildbalken (schwarzes Kreuz)
             gfx.setColor(gfx.kColorBlack)
-            gfx.fillRect(11, 6, 3, 3)
-            gfx.fillRect(18, 6, 3, 3)
-            gfx.setColor(gfx.kColorWhite)
-            gfx.fillRect(12, 7, 1, 1)
-            gfx.fillRect(19, 7, 1, 1)
+            gfx.fillRect(5, 13, 22, 4)
+            gfx.fillRect(14, 5, 4, 22)
+            -- Kleine Augen in den Ecken
+            gfx.fillRect(8, 7, 2, 2)
+            gfx.fillRect(22, 7, 2, 2)
         gfx.popContext()
     end
 
@@ -235,8 +230,6 @@ local function drawEnemyAtAngle(px, py, hl, hw, angleDeg, etype)
     local img
     if etype == 'hunter' then
         img = enemyImageHunter
-    elseif etype == 'invisible' then
-        img = enemyImageInvisible
     elseif etype == 'guardian' then
         img = enemyImageGuardian
     else
@@ -440,8 +433,6 @@ function drawEnemies()
         gfx.fillRect(math.floor(p.x) - hf, math.floor(p.y) - hf, sz, sz)
     end
     for _, e in ipairs(S.enemies) do
-        -- Unsichtbarer Gegner: nicht zeichnen wenn unsichtbar
-        if e.type == 'invisible' and e.invisVisible == false then goto continueEnemy end
         local px, py, hl, hw, ang
         if e.spawning then
             -- Gleitet von r=0 (Mittelpunkt) entlang der Brücke bis zum innersten Ring

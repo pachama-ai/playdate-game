@@ -6,6 +6,18 @@ local math <const> = math
 -- Internal helpers
 -- ---------------------------------------------------------------------------
 
+-- Prüft ob ein Wächter eine Brücke blockiert (nah am Spieler)
+local function guardianBlocksBridge(angleDeg)
+    for _, e in ipairs(S.enemies) do
+        if e.type == 'guardian' and not e.spawning and math.abs(e.ring - S.playerRing) <= 1 then
+            if angleDist(e.angle, angleDeg) < 15 then
+                return true
+            end
+        end
+    end
+    return false
+end
+
 local function makeBridgeStates(seg, slot)
     local states = {}
     -- Welle von außen nach innen: äußerster Gap startet frisch offen,
@@ -294,18 +306,17 @@ function updatePlayer(dt)
         if S.scrollT >= 1.0 then
             S.scrollT   = 1.0
             S.scrolling = false
-            -- Permanenter Zoom: beim Ziel bleiben, kein Snap zurueck!
         else
             local t = S.scrollT
             local smooth = t * t * (3 - 2 * t)
-            -- Um 12% zum Ziel zoomen (permanenter Schritt nach innen/aussen)
             local target = S.scrollZoomStart * S.scrollZoomMult
             S.zoom = S.scrollZoomStart + (target - S.scrollZoomStart) * smooth
         end
         goto skipInput
     end
 
-    -- Keine Lerp zu ZOOM_TABLE mehr — Zoom bleibt wo er ist
+    S.zoomTarget = S.ZOOM_TABLE[S.playerRing]
+    S.zoom       = S.zoom + (S.zoomTarget - S.zoom) * dt * 3
 
     if playdate.buttonJustPressed(playdate.kButtonA) then S.aBufTimer = S.BUF_TIME end
     if playdate.buttonJustPressed(playdate.kButtonB) then S.bBufTimer = S.BUF_TIME end
@@ -320,6 +331,8 @@ function updatePlayer(dt)
             if ok then
                 S.transiting=true; S.transDir=1; S.transT=0; S.transAngle=ba
                 S.aBufTimer=0
+                sfxBridge()
+                onBridgeCross()
             end
         end
         S.aBufTimer = math.max(0, S.aBufTimer - dt)
@@ -331,6 +344,7 @@ function updatePlayer(dt)
                 if ok then
                     S.transiting=true; S.transDir=-1; S.transT=0; S.transAngle=ba
                     S.bBufTimer=0
+                    sfxBridge()
                 end
             else
                 -- Slot 1 am Anfang: kein Zurueckgehen moeglich
@@ -349,6 +363,8 @@ function updatePlayer(dt)
                     S.implodeBaseZoom = S.zoom
                     S.transiting = false
                     S.transT     = 1.0
+                    sfxCenter()
+                    sfxImplode()
                     return
                 elseif S.RING_COUNT < S.VISIBLE then
                     -- Fenster noch nicht voll: erweitern
@@ -371,16 +387,14 @@ function updatePlayer(dt)
                     advanceQueue()
                     S.playerRing = 2
                 end
-                S.scrolling = true
-                S.scrollT   = 0.0
-                S.scrollZoomStart = S.zoom
-                S.scrollZoomMult  = 1.12  -- 12% naeher zur Mitte
+                S.scrolling      = false
+                S.zoomTarget     = S.ZOOM_TABLE[S.playerRing]
+                S.zoom = S.zoom + (S.zoomTarget - S.zoom) * 0.4
             else
                 S.playerRing = math.max(1, S.playerRing - 1)
-                S.scrolling = true
-                S.scrollT   = 0.0
-                S.scrollZoomStart = S.zoom
-                S.scrollZoomMult  = 0.88  -- 12% weiter weg
+                S.scrolling      = false
+                S.zoomTarget     = S.ZOOM_TABLE[S.playerRing]
+                S.zoom = S.zoom + (S.zoomTarget - S.zoom) * 0.4
             end
             S.playerAngle = S.transAngle
             S.playerSeg   = findSeg(S.playerRing, S.playerAngle)
@@ -434,31 +448,24 @@ function updateEnemies(dt)
         if #openB > 0 and #S.enemies < S.ENEMY_MAX then
             local b = openB[math.random(1, #openB)]
             local si = findSeg(S.RING_COUNT, b.angle)
-            -- Zufälligen Gegnertyp wählen (Level-abhängig)
+            -- Gegnertyp Level-abhängig
             local r = math.random()
             local etype
             if S.level == 1 then
-                etype = r < 0.25 and 'ghost' or (r < 0.5 and 'hunter' or (r < 0.75 and 'invisible' or 'guardian'))
+                etype = r < 0.7 and 'ghost' or 'hunter'
             elseif S.level == 2 then
-                etype = r < 0.3 and 'ghost' or (r < 0.55 and 'hunter' or (r < 0.8 and 'invisible' or 'guardian'))
+                etype = r < 0.35 and 'ghost' or (r < 0.65 and 'hunter' or 'guardian')
             else
-                etype = r < 0.2 and 'ghost' or (r < 0.45 and 'hunter' or (r < 0.7 and 'invisible' or 'guardian'))
+                etype = r < 0.2 and 'ghost' or (r < 0.5 and 'hunter' or 'guardian')
             end
             table.insert(S.enemies, {
                 ring=S.RING_COUNT, seg=si, angle=b.angle % 360,
                 onGap=false, gapDir=0, gapAngle=b.angle, gapT=0, gapIdx=0,
                 spawning=true, spawnT=0.0,
-                speed       = S.ENEMY_SPEED_MIN + math.random() * (S.ENEMY_SPEED_MAX - S.ENEMY_SPEED_MIN),
+                speed       = (S.ENEMY_SPEED_MIN + math.random() * (S.ENEMY_SPEED_MAX - S.ENEMY_SPEED_MIN)) * (etype == 'hunter' and 1.5 or 1),
                 dir         = (math.random(2) == 1) and 1 or -1,
                 wanderTimer = (S.WANDER_MIN or 0.8) + math.random() * ((S.WANDER_MAX or 3.0) - (S.WANDER_MIN or 0.8)),
                 type = etype,
-                -- Unsichtbarer: Timer für Sichtbarkeits-Zyklus
-                invisTimer  = (etype == 'invisible') and (math.random() * 3) or nil,
-                invisVisible = (etype == 'invisible') and true or nil,
-                -- Jäger: Zielwinkel
-                huntAngle   = nil,
-                -- Wächter: Blockier-Radius
-                guardRadius = (etype == 'guardian') and 30 or nil,
             })
         else
             S.spawnTimer = 0.5  -- keine Brücke offen, kurz warten
@@ -485,26 +492,56 @@ function updateEnemies(dt)
                 e.gapT  = 0.0
             end
         else
-            -- === TYP-SPEZIFISCHES VERHALTEN ===
-            if e.type == 'invisible' then
-                e.invisTimer = (e.invisTimer or 0) - dt
-                if e.invisTimer <= 0 then
-                    e.invisVisible = not e.invisVisible
-                    e.invisTimer = e.invisVisible and (2 + math.random() * 2) or (1 + math.random() * 1.5)
+            -- === TYP-SPEZIFISCH ===
+            if e.type == 'hunter' then
+                -- Jäger: jagt Spieler auf gleichem Ring, nutzt Brücken normal
+                if e.ring == S.playerRing then
+                    local diff = ((S.playerAngle - e.angle + 180) % 360) - 180
+                    local step = e.speed * dt * 2
+                    if math.abs(diff) > step then
+                        e.angle = (e.angle + (diff > 0 and 1 or -1) * step) % 360
+                    end
+                    local seg = S.RINGS[e.ring] and S.RINGS[e.ring].segs[e.seg or 1]
+                    if seg then e.angle = clampToSeg(e.ring, seg, e.angle) end
+                    e.dir = (diff > 0) and 1 or -1
+                    e.wanderTimer = 999
                 end
-            elseif e.type == 'hunter' then
-                -- Jäger: folgt dem Spieler-Winkel aktiv (2x schnellere Annäherung)
-                local diff = ((S.playerAngle - e.angle + 180) % 360) - 180
-                local step = (e.speed or S.ENEMY_SPEED) * dt * 2
-                if math.abs(diff) > step then
-                    e.angle = (e.angle + (diff > 0 and 1 or -1) * step) % 360
-                end
-                local seg = S.RINGS[e.ring] and S.RINGS[e.ring].segs[e.seg or 1]
-                if seg then e.angle = clampToSeg(e.ring, seg, e.angle) end
-                goto skipBridgeMovement
+                -- Auf anderem Ring: normales Bridge-Verhalten (kein eigener Code nötig)
             elseif e.type == 'guardian' then
-                -- Wächter: bleibt stehen, bewegt sich nur minimal
-                goto skipBridgeMovement
+                -- Wächter: blockiert Brücken nah am Spieler, verpufft nach 10s
+                if not e.spawning and math.abs(e.ring - S.playerRing) <= 1 then
+                    -- Timer starten wenn noch nicht aktiv
+                    if not e.guardTimer then e.guardTimer = 10 end
+                    e.guardTimer = e.guardTimer - dt
+                    if e.guardTimer <= 0 then
+                        -- Verpuffen
+                        local gx, gy = entityPos(e.ring, e.angle)
+                        for k = 1, 14 do
+                            local ang = (k / 14) * math.pi * 2
+                            local r   = 4 + math.random() * 10
+                            table.insert(S.burstParticles, {
+                                x=gx + math.cos(ang)*r, y=gy + math.sin(ang)*r,
+                                life=S.TRAIL_LIFE * 4, maxLife=S.TRAIL_LIFE * 4
+                            })
+                        end
+                        table.remove(S.enemies, idx)
+                        goto continueEnemyLoop
+                    end
+                    -- Zur nächsten Brücke ziehen und blockieren
+                    local gapToExit = e.ring - 1
+                    local bridges = getBridgesOnGap(gapToExit)
+                    local bestAng, bestDist = nil, 361
+                    for _, b in ipairs(bridges) do
+                        local d = angleDist(e.angle, b.angle)
+                        if d < bestDist then bestDist = d; bestAng = b.angle end
+                    end
+                    if bestAng and bestDist > 5 then
+                        local step = 60 * dt
+                        local diff = ((bestAng - e.angle + 180) % 360) - 180
+                        e.angle = (e.angle + (diff > 0 and 1 or -1) * step) % 360
+                    end
+                end
+                -- kein skip — Wächter nutzt auch Brücken
             end
 
             -- Wander-Timer: zufaellig Richtung wechseln (kuerzere Intervalle in hoeherem Level)
@@ -545,6 +582,7 @@ function updateEnemies(dt)
                 local dirAng,  dirDist,  dirSlot      = nil, 361, gapToExit
                 for _, b in ipairs(allBridges) do
                     local fullyOpen = (not b.state) or (b.state.state == 'open')
+                    fullyOpen = fullyOpen and not guardianBlocksBridge(b.angle)
                     if fullyOpen then
                         if curSeg and not angleInSeg(e.ring, curSeg, b.angle) then
                             goto skipBridge
@@ -574,7 +612,7 @@ function updateEnemies(dt)
                         local stillOpen = false
                         for _, b in ipairs(allBridges) do
                             local fullyOpen2 = (not b.state) or (b.state.state == 'open')
-                            if fullyOpen2 and b.slot == chosenSlot and angleDist(b.angle, chosenAng) < 2 then
+                            if fullyOpen2 and not guardianBlocksBridge(b.angle) and b.slot == chosenSlot and angleDist(b.angle, chosenAng) < 2 then
                                 stillOpen = true; break
                             end
                         end
@@ -595,11 +633,12 @@ function updateEnemies(dt)
                 end
             end
         end
-        ::skipBridgeMovement::
         ::continueEnemyLoop::
     end
 
-    -- Gegner-Gegner-Kollision: pixel-basiert, auch am aeussersten Ring
+    
+
+    -- Gegner-Gegner-Kollision
     local toRemove = {}
     for i = 1, #S.enemies do
         local a = S.enemies[i]
@@ -621,6 +660,7 @@ function updateEnemies(dt)
                     end
                     if math.abs(ax - bx) < 10 and math.abs(ay - by) < 10 then
                         toRemove[i] = true; toRemove[j] = true
+                        sfxEnemyCollide()
                         local mx, my = (ax + bx) * 0.5, (ay + by) * 0.5
                         for k = 1, 14 do
                             local ang = (k / 14) * math.pi * 2
@@ -664,6 +704,7 @@ function updateCollision()
             -- Killer-Gegner zuerst entfernen (vor retreatQueue, damit Index stimmt)
             table.remove(S.enemies, killerIdx)
             S.hitFlashTimer = 0.5  -- 3 schwarze Blitze
+            sfxHit()
 
             if S.playerRing > 1 then
                 local retreated = retreatQueue()
@@ -673,10 +714,9 @@ function updateCollision()
                     S.playerRing = S.playerRing - 1
                     S.playerSeg  = findSeg(S.playerRing, S.playerAngle)
                 end
-                S.scrolling = true
-                S.scrollT   = 0.0
-                S.scrollZoomStart = S.zoom
-                S.scrollZoomMult  = 0.88
+                S.scrolling      = false
+                S.zoomTarget     = S.ZOOM_TABLE[S.playerRing]
+                S.zoom = S.zoom + (S.zoomTarget - S.zoom) * 0.3
                 S.transiting     = false
                 S.playerHitTimer = S.HIT_INVINCIBLE
                 S.ppx, S.ppy     = entityPos(S.playerRing, S.playerAngle)
@@ -761,10 +801,10 @@ function setupLevel(lvl)
     -- Level-spezifische Schwierigkeit
     if lvl == 1 then
         S.RING_QUEUE_ALL    = S.RING_QUEUE_L1
-        S.SPAWN_INTERVAL    = 4.0
-        S.ENEMY_SPEED_MIN   = 25
-        S.ENEMY_SPEED_MAX   = 50
-        S.ENEMY_MAX         = 4
+        S.SPAWN_INTERVAL    = 2.5
+        S.ENEMY_SPEED_MIN   = 50
+        S.ENEMY_SPEED_MAX   = 80
+        S.ENEMY_MAX         = 8
         S.WANDER_MIN        = 0.8
         S.WANDER_MAX        = 3.0
         S.BRIDGE_OPEN_DUR   = 3.5
