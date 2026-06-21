@@ -315,9 +315,6 @@ function updatePlayer(dt)
         goto skipInput
     end
 
-    S.zoomTarget = S.ZOOM_TABLE[S.playerRing]
-    S.zoom       = S.zoom + (S.zoomTarget - S.zoom) * dt * 3
-
     if playdate.buttonJustPressed(playdate.kButtonA) then S.aBufTimer = S.BUF_TIME end
     if playdate.buttonJustPressed(playdate.kButtonB) then S.bBufTimer = S.BUF_TIME end
 
@@ -327,27 +324,55 @@ function updatePlayer(dt)
         if seg then S.playerAngle = clampToSeg(S.playerRing, seg, S.playerAngle) end
 
         if S.aBufTimer > 0 then
-            local ok, ba = nearBridge(S.playerRing, S.playerAngle)
-            if ok then
-                S.transiting=true; S.transDir=1; S.transT=0; S.transAngle=ba
-                S.aBufTimer=0
-                sfxBridge()
-                onBridgeCross()
+            if S.conceptualRing >= S.TOTAL_RINGS then
+                -- Am Kern: Brücke zum Mittelpunkt suchen
+                local ok, ba = nearBridge(S.RING_COUNT, S.playerAngle)
+                if ok then
+                    S.transiting=true; S.transDir=1; S.transT=0; S.transAngle=ba
+                    S.aBufTimer=0
+                    sfxBridge()
+                    onBridgeCross()
+                else
+                    -- Fallback: direkter Implode
+                    S.gameState = S.STATE_IMPLODE
+                    S.implodeT = 0.0
+                    S.implodeBaseZoom = S.zoom
+                    S.transiting = false
+                    S.aBufTimer = 0
+                    sfxCenter()
+                    sfxImplode()
+                    return
+                end
+            else
+                local ok, ba = nearBridge(S.playerRing, S.playerAngle)
+                if ok then
+                    S.transiting=true; S.transDir=1; S.transT=0; S.transAngle=ba
+                    S.aBufTimer=0
+                    sfxBridge()
+                    onBridgeCross()
+                end
             end
         end
         S.aBufTimer = math.max(0, S.aBufTimer - dt)
 
         if S.bBufTimer > 0 then
-            if S.playerRing > 1 then
-                -- Normal: Bruecke auf Gap darunter suchen
-                local ok, ba = nearBridge(S.playerRing - 1, S.playerAngle, S.BRIDGE_HALF_BACK)
-                if ok then
-                    S.transiting=true; S.transDir=-1; S.transT=0; S.transAngle=ba
-                    S.bBufTimer=0
-                    sfxBridge()
+            if S.conceptualRing > 1 then
+                if S.conceptualRing == 2 then
+                    -- Ring 2→1: keine Queue-Änderung, Spieler nach außen
+                    S.playerRing = 1
+                    S.conceptualRing = 1
+                elseif S.conceptualRing == 8 then
+                    -- Ring 8→7: keine Queue-Änderung, Spieler in Mitte
+                    S.playerRing = 2
+                    S.conceptualRing = 7
+                else
+                    retreatQueue()
+                    S.conceptualRing = S.conceptualRing - 1
+                    S.playerRing = 2
                 end
+                S.bBufTimer=0
+                S.ppx, S.ppy = entityPos(S.playerRing, S.playerAngle)
             else
-                -- Slot 1 am Anfang: kein Zurueckgehen moeglich
                 S.bBufTimer = 0
             end
         end
@@ -356,8 +381,8 @@ function updatePlayer(dt)
         S.transT = S.transT + dt / S.TRANS_TIME
         if S.transT >= 1.0 then
             if S.transDir == 1 then
-                if S.playerRing == S.RING_COUNT then
-                    -- Innerster Ring → Kreis = Level fertig!
+                if S.conceptualRing >= S.TOTAL_RINGS then
+                    -- Letzter Ring (Kern) → Level fertig!
                     S.gameState       = S.STATE_IMPLODE
                     S.implodeT        = 0.0
                     S.implodeBaseZoom = S.zoom
@@ -366,40 +391,27 @@ function updatePlayer(dt)
                     sfxCenter()
                     sfxImplode()
                     return
-                elseif S.RING_COUNT < S.VISIBLE then
-                    -- Fenster noch nicht voll: erweitern
-                    S.RING_COUNT = S.RING_COUNT + 1
-                    local qi = ((S.queueHead + S.RING_COUNT - 2) % S.TOTAL_RINGS) + 1
-                    buildSlot(S.RING_COUNT, S.RING_QUEUE_ALL[qi])
-                    local newRot = S.RING_QUEUE_ALL[qi].rot
-                    S.angles[S.RING_COUNT]          = (newRot and newRot.startAngle) or 0
-                    S.RINGS[S.RING_COUNT]._rotState = nil
-                    initBStates(S.RING_COUNT)
-                    S.playerRing = S.playerRing + 1
-                elseif S.playerRing <= 1 then
-                    -- Spieler war via B auf Slot 1 zurück → einfach zu Slot 2, keine Queue-Änderung
+                elseif S.conceptualRing == 1 then
+                    -- Ring 1→2: Slot 1→2, keine Queue-Änderung
                     S.playerRing = 2
-                elseif S.finalStage then
-                    -- Letzter Abschnitt: Spieler bewegt sich Schritt für Schritt nach innen
-                    S.playerRing = S.playerRing + 1
+                    S.conceptualRing = 2
+                elseif S.conceptualRing == 7 then
+                    -- Ring 7→8: Slot 2→3 (innerster), keine Queue-Änderung
+                    S.playerRing = 3
+                    S.conceptualRing = 8
                 else
-                    -- Normaler Transit nach innen → Queue vorschieben
+                    -- Normalfall: Queue vorschieben, Mitte (Slot 2)
                     advanceQueue()
                     S.playerRing = 2
+                    S.conceptualRing = S.conceptualRing + 1
                 end
                 S.scrolling      = false
-                S.zoomTarget     = S.ZOOM_TABLE[S.playerRing]
-                S.zoom = S.zoom + (S.zoomTarget - S.zoom) * 0.4
-            else
-                S.playerRing = math.max(1, S.playerRing - 1)
-                S.scrolling      = false
-                S.zoomTarget     = S.ZOOM_TABLE[S.playerRing]
-                S.zoom = S.zoom + (S.zoomTarget - S.zoom) * 0.4
             end
             S.playerAngle = S.transAngle
             S.playerSeg   = findSeg(S.playerRing, S.playerAngle)
             S.transiting  = false
             S.transT      = 1.0
+            S.ppx, S.ppy = entityPos(S.playerRing, S.playerAngle)
         end
     end
 
@@ -715,8 +727,6 @@ function updateCollision()
                     S.playerSeg  = findSeg(S.playerRing, S.playerAngle)
                 end
                 S.scrolling      = false
-                S.zoomTarget     = S.ZOOM_TABLE[S.playerRing]
-                S.zoom = S.zoom + (S.zoomTarget - S.zoom) * 0.3
                 S.transiting     = false
                 S.playerHitTimer = S.HIT_INVINCIBLE
                 S.ppx, S.ppy     = entityPos(S.playerRing, S.playerAngle)
@@ -788,7 +798,7 @@ function respawnPlayer()
     S.playerRing     = S.deathRing  or 1
     S.playerSeg      = S.deathSeg   or 1
     S.playerAngle    = S.deathAngle or 0.0
-    S.zoom           = S.deathZoom  or S.ZOOM_TABLE[1]
+    S.zoom           = S.deathZoom  or 1.3
     S.zoomTarget     = S.zoom
     S.aBufTimer      = 0
     S.bBufTimer      = 0
@@ -837,8 +847,8 @@ function setupLevel(lvl)
     S.transiting     = false
     S.scrolling      = false
     S.scrollT        = 0.0
-    S.zoom           = S.ZOOM_TABLE[1]
-    S.zoomTarget     = S.ZOOM_TABLE[1]
+    S.zoom           = 1.3
+    S.zoomTarget     = 1.3
     S.aBufTimer      = 0
     S.bBufTimer      = 0
     S.particles      = {}
@@ -851,7 +861,8 @@ function setupLevel(lvl)
     S.ringsCleared  = 0
     S.queueAdvances = 0
     S.finalStage    = false
-    S.RING_COUNT    = 4   -- startet mit 4 Ringen, waechst nach erstem Transit
+    S.conceptualRing = 1
+    S.RING_COUNT    = 3   -- immer 3 Ringe sichtbar
     rebuildRingsFromQueue()
 
     S.angles     = {}

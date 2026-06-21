@@ -256,19 +256,18 @@ S.RING_QUEUE_L3 = {
 S.RING_QUEUE_ALL = S.RING_QUEUE_L2   -- default; wird in setupLevel() gesetzt
 S.TOTAL_RINGS    = #S.RING_QUEUE_ALL
 
-S.VISIBLE      = 5   -- max sichtbare Ringe
+S.VISIBLE      = 3   -- max sichtbare Ringe (immer 3)
 S.queueHead    = 1
 
--- Fixed radii for up to 5 visible slots (slot 1 = outermost, slot 5 = innermost)
+-- Fixed radii for 3 slots (1=außen…3=innen)
 -- Constraint: SLOT_OUTER[1] * ZOOM_TABLE[1] <= 120  →  88 * 1.3 = 114.4 ✓
--- Inner slots (3-5) are narrower so seg 6 looks less bulky near the centre.
-S.SLOT_MID   = { 83, 65, 48, 32, 17 }
-S.SLOT_INNER = { 78, 60, 44, 29, 14 }
-S.SLOT_OUTER = { 88, 70, 52, 35, 20 }
+S.SLOT_MID   = { 83, 65, 48 }
+S.SLOT_INNER = { 78, 60, 44 }
+S.SLOT_OUTER = { 88, 70, 52 }
 
 -- S.RINGS[slot] = { mid, inner, outer, rot, segs, _rotState }
 S.RINGS      = {}
-S.RING_COUNT = 4   -- startet mit 4, waechst nach erstem Transit auf 5
+S.RING_COUNT = 3   -- immer 3 Ringe sichtbar
 S.CENTER_R   = 10
 
 -- Bridge constants (seconds)
@@ -290,10 +289,7 @@ S.scrollZoomMult  = 1.0   -- Multiplikator fuer Scroll-Ziel
 -- Zoom (startet bei 1.3 = nah rangezoomt, geht bis 2.0 innen)
 S.zoom       = 1.3
 S.zoomTarget = 1.3
-S.ZOOM_TABLE = {}
-for i = 1, S.VISIBLE do
-    S.ZOOM_TABLE[i] = 1.3 + (i - 1) / (S.VISIBLE - 1) * 0.7
-end
+-- ZOOM_TABLE entfernt (Zoom ist konstant 1.3)
 -- Zoom geht nur leicht rein damit man zurueck kann ohne sich zu verlaufen
 
 S.ringsCleared  = 0   -- wie viele Uebergaenge nach innen bereits gemacht

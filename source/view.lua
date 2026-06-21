@@ -514,6 +514,14 @@ end
 
 -- ---------------------------------------------------------------------------
 function drawHUD()
+    -- Ring-Nummer oben links anzeigen (weiß auf schwarz, max TOTAL_RINGS)
+    if S.conceptualRing then
+        local ringNum = math.min(S.conceptualRing, S.TOTAL_RINGS or 99)
+        gfx.setColor(gfx.kColorWhite)
+        gfx.fillRect(0, 0, 120, 24)
+        gfx.setColor(gfx.kColorBlack)
+        gfx.drawText("Ring " .. ringNum, 4, 4)
+    end
 end
 
 -- ---------------------------------------------------------------------------
@@ -657,7 +665,7 @@ end
 function drawTitleZoomOut(t)
     local tE       = t * t * (3 - 2 * t)
     local startZoom = TITLE_R / S.CENTER_R  -- Zoom bei dem CENTER_R-Kreis = TITLE_R auf Screen
-    local endZoom   = S.ZOOM_TABLE[1]
+    local endZoom   = 1.3
     local savCx, savCy, savZoom = S.cx, S.cy, S.zoom
     S.cx   = 200; S.cy = 120
     S.zoom = startZoom + (endZoom - startZoom) * tE

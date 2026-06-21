@@ -156,13 +156,14 @@ function playdate.update()
     updateMusic(dt, S.playerRing, S.RING_COUNT)
     updatePlayer(dt)
     if S.gameState ~= S.STATE_PLAY then return end
-    updateEnemies(dt)
-    updateEnemyTrails(dt)
-    updateCollision()
+    --updateEnemies(dt)
+    --updateEnemyTrails(dt)
+    --updateCollision()
 
     drawBoard()
+    drawHUD()
     drawTrailParticles()
-    drawEnemies()
+    --drawEnemies()
     drawPlayer()
 
     -- Hit-Flash: 3x schwarz aufblitzen bei Treffer
