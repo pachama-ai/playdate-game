@@ -286,11 +286,10 @@ S.SCROLL_DUR      = 0.55
 S.scrollZoomStart = 1.3   -- Zoom zu Beginn des Scrolls
 S.scrollZoomMult  = 1.0   -- Multiplikator fuer Scroll-Ziel
 
--- Zoom (startet bei 1.3 = nah rangezoomt, geht bis 2.0 innen)
-S.zoom       = 1.3
-S.zoomTarget = 1.3
--- ZOOM_TABLE entfernt (Zoom ist konstant 1.3)
--- Zoom geht nur leicht rein damit man zurueck kann ohne sich zu verlaufen
+-- Tunnel-Zoom: steigt mit jedem Ring nach innen
+S.zoom       = 1.0
+S.zoomTarget = 1.0
+S.ZOOM_PER_RING  = 0.14  -- Zoom-Zuwachs pro Ring (alle Ringe bleiben sichtbar)
 
 S.ringsCleared  = 0   -- wie viele Uebergaenge nach innen bereits gemacht
 S.queueAdvances = 0   -- wie oft advanceQueue() bisher aufgerufen wurde

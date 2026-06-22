@@ -88,7 +88,6 @@ local function drawArc(innerR, outerR, arcStart, arcSweep, invert)
     local da = arcSweep / steps
     local oi = sc(innerR)
     local oo = sc(outerR)
-    gfx.setColor(invert and gfx.kColorBlack or gfx.kColorWhite)
     for i = 0, steps-1 do
         local a1  = math.rad(arcStart + i*da)
         local a2  = math.rad(arcStart + (i+1)*da)
@@ -247,7 +246,7 @@ function drawBoard()
     drawScanlineBg()
     local nowMs = playdate.getCurrentTimeMilliseconds()
 
-    -- 1) Draw all ring segments (Tiefe: innere Ringe schmaler)
+    -- 1) Draw all ring segments
     for slot = 1, S.RING_COUNT do
         local ring = S.RINGS[slot]
         local depth = 1.0 - (slot - 1) / math.max(1, S.RING_COUNT - 1) * 0.55
@@ -255,6 +254,13 @@ function drawBoard()
         local half  = (ring.outer - ring.inner) * 0.5 * depth
         local dInner = mid - half
         local dOuter = mid + half
+        -- Spieler-Ring: weiß, andere Ringe: grau gedithert
+        if slot == S.playerRing then
+            gfx.setColor(gfx.kColorWhite)
+        else
+            -- 50% Checkerboard-Grau
+            gfx.setPattern({0xAA, 0x55, 0xAA, 0x55, 0xAA, 0x55, 0xAA, 0x55})
+        end
         for _, seg in ipairs(ring.segs) do
             if seg.arcW >= 360 then
                 drawArc(dInner, dOuter, 0, 360)
@@ -343,9 +349,10 @@ function drawBoard()
         end
     end
 
-    -- Pulsierender Mittelpunkt (dezent)
+    -- Pulsierender Mittelpunkt (wächst sanft mit jedem Ring)
+    local centerR = S.CENTER_R + math.max(0, (S.conceptualRing or 1) - 1) * 2
     local pulse = 1.0 + 0.06 * math.sin(playdate.getCurrentTimeMilliseconds() / 1000 * math.pi * 2 * 1.2)
-    local pulseR = math.max(2, sc(S.CENTER_R) * pulse)
+    local pulseR = math.max(2, sc(centerR) * pulse)
     gfx.setColor(gfx.kColorWhite)
     gfx.fillCircleAtPoint(S.cx, S.cy, pulseR)
 end

@@ -357,21 +357,13 @@ function updatePlayer(dt)
 
         if S.bBufTimer > 0 then
             if S.conceptualRing > 1 then
-                if S.conceptualRing == 2 then
-                    -- Ring 2→1: keine Queue-Änderung, Spieler nach außen
-                    S.playerRing = 1
-                    S.conceptualRing = 1
-                elseif S.conceptualRing == 8 then
-                    -- Ring 8→7: keine Queue-Änderung, Spieler in Mitte
-                    S.playerRing = 2
-                    S.conceptualRing = 7
-                else
-                    retreatQueue()
-                    S.conceptualRing = S.conceptualRing - 1
-                    S.playerRing = 2
+                -- Rückwärts-Brücke auf Gap darunter suchen (wie A nur entgegengesetzt)
+                local ok, ba = nearBridge(S.playerRing - 1, S.playerAngle, S.BRIDGE_HALF_BACK)
+                if ok then
+                    S.transiting=true; S.transDir=-1; S.transT=0; S.transAngle=ba
+                    S.bBufTimer=0
+                    sfxBridge()
                 end
-                S.bBufTimer=0
-                S.ppx, S.ppy = entityPos(S.playerRing, S.playerAngle)
             else
                 S.bBufTimer = 0
             end
@@ -406,6 +398,21 @@ function updatePlayer(dt)
                     S.conceptualRing = S.conceptualRing + 1
                 end
                 S.scrolling      = false
+            elseif S.transDir == -1 then
+                if S.conceptualRing == 2 then
+                    -- Ring 2→1: Slot 2→1, keine Queue-Änderung
+                    S.playerRing = 1
+                    S.conceptualRing = 1
+                elseif S.conceptualRing == 8 then
+                    -- Ring 8→7: Slot 3→2, keine Queue-Änderung
+                    S.playerRing = 2
+                    S.conceptualRing = 7
+                else
+                    -- Normal zurück: Queue zurück, Mitte
+                    retreatQueue()
+                    S.playerRing = 2
+                    S.conceptualRing = S.conceptualRing - 1
+                end
             end
             S.playerAngle = S.transAngle
             S.playerSeg   = findSeg(S.playerRing, S.playerAngle)
@@ -417,17 +424,19 @@ function updatePlayer(dt)
 
     ::skipInput::
 
+    -- Zoom: während Transit smoothstep, danach direkt setzen
+    local function zoomFor(r) return 1.0 + math.max(0, (r or 1) - 1) * S.ZOOM_PER_RING end
     if S.transiting then
-        local toRing = math.max(1, math.min(S.RING_COUNT, S.playerRing + S.transDir))
-        local r1 = sc(S.RINGS[S.playerRing].mid)
-        local r2 = sc(S.RINGS[toRing].mid)
-        local r  = r1 + (r2 - r1) * S.transT
-        local a  = math.rad(S.transAngle)
-        S.ppx = S.cx + r * math.sin(a)
-        S.ppy = S.cy - r * math.cos(a)
+        local toZoom = zoomFor(S.conceptualRing + S.transDir)
+        local fromZoom = zoomFor(S.conceptualRing)
+        local tE = S.transT * S.transT * (3 - 2 * S.transT)
+        S.zoom = fromZoom + (toZoom - fromZoom) * tE
     else
-        S.ppx, S.ppy = entityPos(S.playerRing, S.playerAngle)
+        S.zoom = zoomFor(S.conceptualRing)
     end
+
+    -- Position immer über entityPos (Zoom-Animation erzeugt Tunnel-Effekt)
+    S.ppx, S.ppy = entityPos(S.playerRing, S.playerAngle)
 
     table.insert(S.particles, {x=S.ppx, y=S.ppy, life=S.TRAIL_LIFE})
     if #S.particles > 12 then table.remove(S.particles, 1) end
