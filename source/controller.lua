@@ -461,6 +461,21 @@ function updateEnemies(dt)
         S.spawnTimer = S.SPAWN_INTERVAL
         -- Offene Brücke vom Mittelpunkt zum innersten Ring suchen
         local allB = getBridgesOnGap(S.RING_COUNT)
+        -- Auch Vorschau-Brücken des nächsten Queue-Eintrags berücksichtigen
+        if S.conceptualRing and S.conceptualRing < S.TOTAL_RINGS then
+            local qi_next = ((S.queueHead + S.RING_COUNT - 1) % S.TOTAL_RINGS) + 1
+            local nextDef = S.RING_QUEUE_ALL[qi_next]
+            if nextDef and nextDef.segs then
+                for si, seg in ipairs(nextDef.segs) do
+                    if seg.bOff_up and #seg.bOff_up > 0 then
+                        local bas = segBridgeAnglesFrom(S.RING_COUNT, seg, seg.bOff_up)
+                        for _, ba in ipairs(bas) do
+                            table.insert(allB, { angle=ba, slot=S.RING_COUNT, seg=si, bridge=0, open=true, state=nil })
+                        end
+                    end
+                end
+            end
+        end
         local openB = {}
         for _, b in ipairs(allB) do
             local fullyOpen = (not b.state) or (b.state.state == 'open')

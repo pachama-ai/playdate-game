@@ -319,6 +319,22 @@ function drawBoard()
                 end
             end
         end
+        -- Zentrum-Gap Vorschau: bOff_up-Brücken des nächsten Queue-Eintrags
+        -- zeichnen (die Brücken zwischen diesem Ring und dem nächsten).
+        if gap == S.RING_COUNT and S.conceptualRing and S.conceptualRing < S.TOTAL_RINGS then
+            local qi_next = ((S.queueHead + S.RING_COUNT - 1) % S.TOTAL_RINGS) + 1
+            local nextDef = S.RING_QUEUE_ALL[qi_next]
+            if nextDef and nextDef.segs then
+                for si2, seg2 in ipairs(nextDef.segs) do
+                    if seg2.bOff_up and #seg2.bOff_up > 0 then
+                        local bas2 = segBridgeAnglesFrom(S.RING_COUNT, seg2, seg2.bOff_up)
+                        for _, ba in ipairs(bas2) do
+                            drawBridgeShape(ba, bGM, bHL, bHW)
+                        end
+                    end
+                end
+            end
+        end
 
         -- Draw up-bridges (attached to inner ring, span gap outward)
         if gap < S.RING_COUNT then
