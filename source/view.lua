@@ -365,6 +365,30 @@ function drawBoard()
         end
     end
 
+    -- Neuer Ring wächst während Transit aus dem Mittelpunkt
+    if S.transiting and S.transDir == 1 and S.conceptualRing and S.conceptualRing < S.TOTAL_RINGS then
+        local tE = S.transT * S.transT * (3 - 2 * S.transT)
+        local qi_next = ((S.queueHead + S.RING_COUNT - 1) % S.TOTAL_RINGS) + 1
+        local nextDef = S.RING_QUEUE_ALL[qi_next]
+        if nextDef and nextDef.segs then
+            local slot3Outer = S.SLOT_OUTER[S.RING_COUNT]
+            local slot3Inner = S.SLOT_INNER[S.RING_COUNT]
+            local pOuter = slot3Outer * tE
+            local pInner = slot3Inner * tE
+            if pOuter > pInner + 2 then
+                gfx.setPattern({0xAA, 0x55, 0xAA, 0x55, 0xAA, 0x55, 0xAA, 0x55})
+                for _, seg in ipairs(nextDef.segs) do
+                    if seg.arcW >= 360 then
+                        drawArc(pInner, pOuter, 0, 360)
+                    else
+                        local as = segArcStart(S.RING_COUNT, seg)
+                        drawArc(pInner, pOuter, as, seg.arcW, false)
+                    end
+                end
+            end
+        end
+    end
+
     -- Pulsierender Mittelpunkt (wächst sanft mit jedem Ring)
     local centerR = S.CENTER_R + math.max(0, (S.conceptualRing or 1) - 1) * 2
     local pulse = 1.0 + 0.06 * math.sin(playdate.getCurrentTimeMilliseconds() / 1000 * math.pi * 2 * 1.2)

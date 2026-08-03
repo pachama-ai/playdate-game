@@ -312,7 +312,7 @@ S.transiting  = false
 S.transDir    = 0
 S.transT      = 0.0
 S.transAngle  = 0.0
-S.TRANS_TIME  = 0.2
+S.TRANS_TIME  = 0.5
 S.ppx         = 0
 S.ppy         = 0
 
